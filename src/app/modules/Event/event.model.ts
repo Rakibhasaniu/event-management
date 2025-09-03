@@ -88,14 +88,6 @@ eventSchema.index({ category: 1 });
 eventSchema.index({ status: 1 });
 eventSchema.index({ title: 'text', description: 'text' }); // Text search
 
-// Auto-generate ID
-// eventSchema.pre('save', async function (next) {
-//   if (!this.id) {
-//     const count = await model('Event').countDocuments();
-//     this.id = `EVT-${String(count + 1).padStart(6, '0')}`;
-//   }
-//   next();
-// });
 
 // Update status based on date
 eventSchema.pre('save', function (next) {
