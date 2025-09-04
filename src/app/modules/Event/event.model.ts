@@ -30,7 +30,7 @@ const eventSchema = new Schema<TEvent>({
   category: {
     type: String,
     required: true,
-    enum: ['Conference', 'Workshop', 'Meetup', 'Seminar', 'Other'],
+    enum: ['Conference', 'Workshop', 'Meetup', 'Seminar', 'Other' ,'AllCategory'],
   },
   createdBy: {
     type: String,
@@ -58,7 +58,7 @@ const eventSchema = new Schema<TEvent>({
   },
   status: {
     type: String,
-    enum: ['upcoming', 'ongoing', 'completed', 'cancelled'],
+    enum: ['upcoming', 'ongoing', 'completed', 'cancelled','allstatus'],
     default: 'upcoming',
   },
   isPublic: {

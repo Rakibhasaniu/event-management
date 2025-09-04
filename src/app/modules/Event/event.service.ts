@@ -1,10 +1,9 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import httpStatus from 'http-status';
-import mongoose from 'mongoose';
 import AppError from '../../errors/AppError';
-import { TCreateEvent, TEventQuery, TUpdateEvent } from './event.interface';
+import QueryBuilder from '../../builder/QueryBuilder';
+import { TCreateEvent, TUpdateEvent } from './event.interface';
 import { Event } from './event.model';
-import { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE } from './event.constant';
 
 const createEvent = async (payload: TCreateEvent, userId: string) => {
   // Generate event ID manually
@@ -13,7 +12,7 @@ const createEvent = async (payload: TCreateEvent, userId: string) => {
 
   const eventData = {
     ...payload,
-    id: eventId, // Add this line
+    id: eventId,
     createdBy: userId,
     date: new Date(payload.date),
   };
@@ -21,194 +20,55 @@ const createEvent = async (payload: TCreateEvent, userId: string) => {
   const event = await Event.create(eventData);
   return event;
 };
-const getAllEvents = async (query: TEventQuery) => {
-  const {
-    search,
-    category,
-    status,
-    startDate,
-    endDate,
-    isPublic,
-    page = 1,
-    limit = DEFAULT_PAGE_SIZE,
-    sort = '-createdAt',
-  } = query;
 
-  // Build match conditions
-  const matchConditions: any = {
-    isDeleted: false,
-  };
-
-  if (isPublic !== undefined) {
-    matchConditions.isPublic = isPublic;
-  }
-
-  if (category) {
-    matchConditions.category = category;
-  }
-
-  if (status) {
-    matchConditions.status = status;
-  }
-
-  if (startDate || endDate) {
-    matchConditions.date = {};
-    if (startDate) matchConditions.date.$gte = new Date(startDate);
-    if (endDate) matchConditions.date.$lte = new Date(endDate);
-  }
-
-  // Text search
-  if (search) {
-    matchConditions.$or = [
-      { title: { $regex: search, $options: 'i' } },
-      { description: { $regex: search, $options: 'i' } },
-      { location: { $regex: search, $options: 'i' } },
-      { tags: { $in: [new RegExp(search, 'i')] } },
-    ];
-  }
-
-  const pipeline: mongoose.PipelineStage[] = [
-    { $match: matchConditions },
-    {
-      $addFields: {
-        attendeeCount: { $size: '$attendees' },
-        isUpcoming: { $gt: ['$date', new Date()] },
-        daysUntilEvent: {
-          $divide: [
-            { $subtract: ['$date', new Date()] },
-            1000 * 60 * 60 * 24
-          ]
-        }
-      }
-    },
-    {
-      $lookup: {
-        from: 'users',
-        localField: 'createdBy',
-        foreignField: 'id',
-        as: 'creator',
-        pipeline: [
-          { $project: { id: 1, email: 1, role: 1 } }
-        ]
-      }
-    },
-    {
-      $project: {
-        id: 1,
-        title: 1,
-        description: 1,
-        date: 1,
-        location: 1,
-        category: 1,
-        attendees: 1,
-        attendeeCount: 1,
-        maxAttendees: 1,
-        status: 1,
-        isPublic: 1,
-        tags: 1,
-        imageUrl: 1,
-        createdAt: 1,
-        updatedAt: 1,
-        creator: { $arrayElemAt: ['$creator', 0] },
-        isUpcoming: 1,
-        daysUntilEvent: { $round: ['$daysUntilEvent', 1] }
-      }
-    },
-    { $sort: { [sort.startsWith('-') ? sort.substring(1) : sort]: sort.startsWith('-') ? -1 : 1 } },
-    { $skip: (Math.max(1, page) - 1) * Math.min(limit, MAX_PAGE_SIZE) },
-    { $limit: Math.min(limit, MAX_PAGE_SIZE) }
-  ];
-
-  const events = await Event.aggregate(pipeline);
+const getAllEvents = async (query: Record<string, unknown>) => {
+  console.log("🚀 ~ getAllEvents ~ query:", query);
   
-  // Get total count for pagination
-  const totalPipeline = [
-    { $match: matchConditions },
-    { $count: 'total' }
-  ];
-  const totalResult = await Event.aggregate(totalPipeline);
-  const total = totalResult[0]?.total || 0;
+  // Handle 'AllCategory' by removing category from query (case-insensitive check)
+  if (query.category && String(query.category).toLowerCase() === 'allcategory') {
+    delete query.category;
+  }
+  
+  // Handle 'allstatus' by removing status from query (case-insensitive check)
+  if (query.status && String(query.status).toLowerCase() === 'allstatus') {
+    delete query.status;
+  }
+  
+  // Build base query for non-deleted events
+  const eventQuery = Event.find({ isDeleted: false });
+
+  // Searchable fields for events
+  const searchableFields = ['title', 'description', 'location', 'tags'];
+
+  // Apply QueryBuilder
+  const eventQueryBuilder = new QueryBuilder(eventQuery, query)
+    .search(searchableFields)
+    .filter()
+    .sort()
+    .paginate()
+    .fields();
+
+  // Execute query
+  const events = await eventQueryBuilder.modelQuery;
+
+  // Get pagination info
+  const meta = await eventQueryBuilder.countTotal();
+
+  // Get all available categories if requested (also case-insensitive)
+  let categories = null;
+  if (query.includeCategories === 'true' || 
+      (query.category && String(query.category).toLowerCase() === 'allcategory')) {
+    categories = await Event.distinct('category', { isDeleted: false });
+  }
 
   return {
     events,
-    pagination: {
-      page: Math.max(1, page),
-      limit: Math.min(limit, MAX_PAGE_SIZE),
-      total,
-      totalPages: Math.ceil(total / Math.min(limit, MAX_PAGE_SIZE)),
-    }
+    meta,
+    ...(categories && { categories }), // Only include categories if they exist
   };
 };
-
 const getEventById = async (eventId: string) => {
-  const pipeline: mongoose.PipelineStage[] = [
-    { 
-      $match: { 
-        id: eventId, 
-        isDeleted: false 
-      } 
-    },
-    {
-      $addFields: {
-        attendeeCount: { $size: '$attendees' },
-        isUpcoming: { $gt: ['$date', new Date()] },
-        daysUntilEvent: {
-          $divide: [
-            { $subtract: ['$date', new Date()] },
-            1000 * 60 * 60 * 24
-          ]
-        }
-      }
-    },
-    {
-      $lookup: {
-        from: 'users',
-        localField: 'createdBy',
-        foreignField: 'id',
-        as: 'creator',
-        pipeline: [
-          { $project: { id: 1, email: 1, role: 1 } }
-        ]
-      }
-    },
-    {
-      $lookup: {
-        from: 'users',
-        localField: 'attendees.userId',
-        foreignField: 'id',
-        as: 'attendeeDetails',
-        pipeline: [
-          { $project: { id: 1, email: 1 } }
-        ]
-      }
-    },
-    {
-      $project: {
-        id: 1,
-        title: 1,
-        description: 1,
-        date: 1,
-        location: 1,
-        category: 1,
-        attendees: 1,
-        attendeeCount: 1,
-        attendeeDetails: 1,
-        maxAttendees: 1,
-        status: 1,
-        isPublic: 1,
-        tags: 1,
-        imageUrl: 1,
-        createdAt: 1,
-        updatedAt: 1,
-        creator: { $arrayElemAt: ['$creator', 0] },
-        isUpcoming: 1,
-        daysUntilEvent: { $round: ['$daysUntilEvent', 1] }
-      }
-    }
-  ];
-
-  const events = await Event.aggregate(pipeline);
-  const event = events[0];
+  const event = await Event.findOne({ id: eventId, isDeleted: false });
 
   if (!event) {
     throw new AppError(httpStatus.NOT_FOUND, 'Event not found');
@@ -217,59 +77,30 @@ const getEventById = async (eventId: string) => {
   return event;
 };
 
-const getUserEvents = async (userId: string, query: TEventQuery) => {
-  const {
-    search,
-    category,
-    status,
-    page = 1,
-    limit = DEFAULT_PAGE_SIZE,
-    sort = '-createdAt',
-  } = query;
+const getUserEvents = async (userId: string, query: Record<string, unknown>) => {
+  // Build base query for user's events
+  const eventQuery = Event.find({ createdBy: userId, isDeleted: false });
 
-  const matchConditions: any = {
-    createdBy: userId,
-    isDeleted: false,
-  };
+  // Searchable fields
+  const searchableFields = ['title', 'description'];
 
-  if (category) matchConditions.category = category;
-  if (status) matchConditions.status = status;
-  
-  if (search) {
-    matchConditions.$or = [
-      { title: { $regex: search, $options: 'i' } },
-      { description: { $regex: search, $options: 'i' } },
-    ];
-  }
+  // Apply QueryBuilder
+  const eventQueryBuilder = new QueryBuilder(eventQuery, query)
+    .search(searchableFields)
+    .filter()
+    .sort()
+    .paginate()
+    .fields();
 
-  const pipeline: mongoose.PipelineStage[] = [
-    { $match: matchConditions },
-    {
-      $addFields: {
-        attendeeCount: { $size: '$attendees' },
-      }
-    },
-    { $sort: { [sort.startsWith('-') ? sort.substring(1) : sort]: sort.startsWith('-') ? -1 : 1 } },
-    { $skip: (Math.max(1, page) - 1) * Math.min(limit, MAX_PAGE_SIZE) },
-    { $limit: Math.min(limit, MAX_PAGE_SIZE) }
-  ];
+  // Execute query
+  const events = await eventQueryBuilder.modelQuery;
 
-  const events = await Event.aggregate(pipeline);
-  
-  const totalResult = await Event.aggregate([
-    { $match: matchConditions },
-    { $count: 'total' }
-  ]);
-  const total = totalResult[0]?.total || 0;
+  // Get pagination info
+  const meta = await eventQueryBuilder.countTotal();
 
   return {
     events,
-    pagination: {
-      page: Math.max(1, page),
-      limit: Math.min(limit, MAX_PAGE_SIZE),
-      total,
-      totalPages: Math.ceil(total / Math.min(limit, MAX_PAGE_SIZE)),
-    }
+    meta,
   };
 };
 
@@ -293,7 +124,7 @@ const updateEvent = async (eventId: string, payload: TUpdateEvent, userId: strin
     { id: eventId },
     updateData,
     { new: true, runValidators: true }
-  );
+  ).populate('createdBy', 'id email role');
 
   return updatedEvent;
 };
@@ -351,51 +182,47 @@ const rsvpEvent = async (eventId: string, userId: string, rsvpStatus: string) =>
   }
 
   const updatedEvent = await event.save();
-  return updatedEvent;
+  return updatedEvent.populate('createdBy', 'id email role');
 };
 
 const getEventAnalytics = async (userId?: string) => {
+  // Build filter conditions
   const matchConditions: any = { isDeleted: false };
-  if (userId) matchConditions.createdBy = userId;
+  if (userId) {
+    matchConditions.createdBy = userId;
+  }
 
-  const pipeline: mongoose.PipelineStage[] = [
-    { $match: matchConditions },
-    {
-      $group: {
-        _id: null,
-        totalEvents: { $sum: 1 },
-        upcomingEvents: {
-          $sum: { $cond: [{ $gt: ['$date', new Date()] }, 1, 0] }
-        },
-        totalAttendees: { $sum: { $size: '$attendees' } },
-        avgAttendeesPerEvent: { $avg: { $size: '$attendees' } },
-        eventsByCategory: {
-          $push: {
-            category: '$category',
-            attendeeCount: { $size: '$attendees' }
-          }
-        }
-      }
-    },
-    {
-      $project: {
-        _id: 0,
-        totalEvents: 1,
-        upcomingEvents: 1,
-        totalAttendees: 1,
-        avgAttendeesPerEvent: { $round: ['$avgAttendeesPerEvent', 1] },
-        eventsByCategory: 1
-      }
+  // Get all events matching conditions
+  const events = await Event.find(matchConditions);
+
+  // Calculate analytics manually
+  const totalEvents = events.length;
+  const upcomingEvents = events.filter(event => new Date(event.date) > new Date()).length;
+  const totalAttendees = events.reduce((sum, event) => sum + event.attendees.length, 0);
+  const avgAttendeesPerEvent = totalEvents > 0 ? Math.round((totalAttendees / totalEvents) * 10) / 10 : 0;
+
+  // Group events by category
+  const eventsByCategory = events.reduce((acc: any[], event) => {
+    const existing = acc.find(item => item.category === event.category);
+    if (existing) {
+      existing.eventCount += 1;
+      existing.attendeeCount += event.attendees.length;
+    } else {
+      acc.push({
+        category: event.category,
+        eventCount: 1,
+        attendeeCount: event.attendees.length,
+      });
     }
-  ];
+    return acc;
+  }, []);
 
-  const analytics = await Event.aggregate(pipeline);
-  return analytics[0] || {
-    totalEvents: 0,
-    upcomingEvents: 0,
-    totalAttendees: 0,
-    avgAttendeesPerEvent: 0,
-    eventsByCategory: []
+  return {
+    totalEvents,
+    upcomingEvents,
+    totalAttendees,
+    avgAttendeesPerEvent,
+    eventsByCategory,
   };
 };
 

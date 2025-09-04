@@ -3,14 +3,17 @@ export const EVENT_CATEGORIES = [
   'Workshop', 
   'Meetup',
   'Seminar',
-  'Other'
+  'Other',
+  'AllCategory'
+
 ] as const;
 
 export const EVENT_STATUS = [
   'upcoming',
   'ongoing', 
   'completed',
-  'cancelled'
+  'cancelled',
+  'allstatus'
 ] as const;
 
 export const RSVP_STATUS = [

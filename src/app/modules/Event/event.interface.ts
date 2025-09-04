@@ -12,11 +12,11 @@ export interface TEvent extends Document {
   description: string;
   date: Date;
   location: string;
-  category: 'Conference' | 'Workshop' | 'Meetup' | 'Seminar' | 'Other';
+  category: 'Conference' | 'Workshop' | 'Meetup' | 'Seminar' | 'Other' | 'AllCategory';
   createdBy: string;
   attendees: TAttendee[];
   maxAttendees?: number;
-  status: 'upcoming' | 'ongoing' | 'completed' | 'cancelled';
+  status: 'upcoming' | 'ongoing' | 'completed' | 'cancelled' | 'allstatus';
   isPublic: boolean;
   tags: string[];
   imageUrl?: string;
@@ -30,7 +30,7 @@ export interface TCreateEvent {
   description: string;
   date: string;
   location: string;
-  category: 'Conference' | 'Workshop' | 'Meetup' | 'Seminar' | 'Other';
+  category: 'Conference' | 'Workshop' | 'Meetup' | 'Seminar' | 'Other' |'AllCategory';
   maxAttendees?: number;
   isPublic?: boolean;
   tags?: string[];
@@ -42,12 +42,12 @@ export interface TUpdateEvent {
   description?: string;
   date?: string;
   location?: string;
-  category?: 'Conference' | 'Workshop' | 'Meetup' | 'Seminar' | 'Other';
+  category?: 'Conference' | 'Workshop' | 'Meetup' | 'Seminar' | 'Other' |'AllCategory';
   maxAttendees?: number;
   isPublic?: boolean;
   tags?: string[];
   imageUrl?: string;
-  status?: 'upcoming' | 'ongoing' | 'completed' | 'cancelled';
+  status?: 'upcoming' | 'ongoing' | 'completed' | 'cancelled' | 'allstatus';
 }
 
 export interface TEventQuery {

@@ -50,7 +50,7 @@ const updateEventValidationSchema = z.object({
     isPublic: z.boolean().optional(),
     tags: z.array(z.string()).optional(),
     imageUrl: z.string().url('Invalid image URL').optional(),
-    status: z.enum(['upcoming', 'ongoing', 'completed', 'cancelled']).optional(),
+    status: z.enum(['upcoming', 'ongoing', 'completed', 'cancelled','allstatus']).optional(),
   }),
 });
 
@@ -65,8 +65,10 @@ const rsvpEventValidationSchema = z.object({
 const getEventsValidationSchema = z.object({
   query: z.object({
     search: z.string().optional(),
-    category: z.enum(EVENT_CATEGORIES).optional(),
-    status: z.enum(['upcoming', 'ongoing', 'completed', 'cancelled']).optional(),
+    category: z.enum(EVENT_CATEGORIES)
+      .optional()
+      .transform(val => val === 'AllCategory' ? undefined : val), // Transform AllCategory to undefined
+    status: z.enum(['upcoming', 'ongoing', 'completed', 'cancelled','allstatus']).optional().transform(val => val === 'allstatus' ? undefined : val),
     startDate: z.string().optional(),
     endDate: z.string().optional(),
     isPublic: z.string().transform((val) => val === 'true').optional(),
