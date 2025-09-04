@@ -78,26 +78,24 @@ const getEventById = async (eventId: string) => {
 };
 
 const getUserEvents = async (userId: string, query: Record<string, unknown>) => {
-  // Build base query for user's events
   const eventQuery = Event.find({ createdBy: userId, isDeleted: false });
-
-  // Searchable fields
-  const searchableFields = ['title', 'description'];
-
-  // Apply QueryBuilder
-  const eventQueryBuilder = new QueryBuilder(eventQuery, query)
+    const filteredQuery = { ...query };
+    if (filteredQuery.status === 'allstatus') {
+    delete filteredQuery.status;
+  }
+    if (filteredQuery.category === 'AllCategory') {
+    delete filteredQuery.category;
+  }
+    const searchableFields = ['title', 'description'];
+    const eventQueryBuilder = new QueryBuilder(eventQuery, filteredQuery)
     .search(searchableFields)
     .filter()
     .sort()
     .paginate()
     .fields();
-
-  // Execute query
-  const events = await eventQueryBuilder.modelQuery;
-
-  // Get pagination info
-  const meta = await eventQueryBuilder.countTotal();
-
+    const events = await eventQueryBuilder.modelQuery;
+    const meta = await eventQueryBuilder.countTotal();
+  
   return {
     events,
     meta,
@@ -105,6 +103,7 @@ const getUserEvents = async (userId: string, query: Record<string, unknown>) => 
 };
 
 const updateEvent = async (eventId: string, payload: TUpdateEvent, userId: string) => {
+
   const event = await Event.findOne({ id: eventId, isDeleted: false });
 
   if (!event) {

@@ -2,6 +2,8 @@ import httpStatus from 'http-status';
 import catchAsync from '../../utils/catchAsync';
 import sendResponse from '../../utils/sendResponse';
 import { EventServices } from './event.service';
+import AppError from '../../errors/AppError';
+import { User } from '../User/user.model';
 
 const createEvent = catchAsync(async (req, res) => {
   const result = await EventServices.createEvent(req.body, req.user.userId);
@@ -50,7 +52,15 @@ const getUserEvents = catchAsync(async (req, res) => {
 
 const updateEvent = catchAsync(async (req, res) => {
   const { eventId } = req.params;
-  const result = await EventServices.updateEvent(eventId, req.body, req.user.userId);
+  
+  // First find the user by custom ID to get MongoDB _id
+  const user = await User.findOne({ id: req.user.userId });
+  
+  if (!user) {
+    throw new AppError(httpStatus.NOT_FOUND, 'User not found');
+  }
+
+  const result = await EventServices.updateEvent(eventId, req.body, user._id.toString());
 
   sendResponse(res, {
     statusCode: httpStatus.OK,
@@ -59,7 +69,6 @@ const updateEvent = catchAsync(async (req, res) => {
     data: result,
   });
 });
-
 const deleteEvent = catchAsync(async (req, res) => {
   const { eventId } = req.params;
   await EventServices.deleteEvent(eventId, req.user.userId);
