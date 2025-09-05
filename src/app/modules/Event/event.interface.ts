@@ -40,7 +40,7 @@ export interface TCreateEvent {
 export interface TUpdateEvent {
   title?: string;
   description?: string;
-  date?: string;
+  date?: Date;
   location?: string;
   category?: 'Conference' | 'Workshop' | 'Meetup' | 'Seminar' | 'Other' |'AllCategory';
   maxAttendees?: number;

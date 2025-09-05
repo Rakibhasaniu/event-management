@@ -1,48 +1,7 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
-/* eslint-disable @typescript-eslint/no-this-alias */
 import bcrypt from 'bcrypt';
 import { Schema, model } from 'mongoose';
 import config from '../../config';
-import { UserStatus } from './user.constant';
 import { TUser, UserModel } from './user.interface';
-
-const userProfileSchema = new Schema({
-  firstName: {
-    type: String,
-    required: true,
-    trim: true,
-    maxlength: 50,
-  },
-  lastName: {
-    type: String,
-    required: true,
-    trim: true,
-    maxlength: 50,
-  },
-  phone: {
-    type: String,
-    trim: true,
-  },
-  avatar: {
-    type: String,
-    default: null,
-  },
-}, { _id: false });
-
-const passwordResetHistorySchema = new Schema({
-  resetAt: {
-    type: Date,
-    required: true,
-  },
-  resetMethod: {
-    type: String,
-    required: true,
-  },
-  ipAddress: {
-    type: String,
-    required: true,
-  },
-}, { _id: false });
 
 const userSchema = new Schema<TUser, UserModel>(
   {
@@ -50,6 +9,11 @@ const userSchema = new Schema<TUser, UserModel>(
       type: String,
       required: true,
       unique: true,
+    },
+    name: {
+      type: String,
+      required: true,
+      trim: true,
     },
     email: {
       type: String,
@@ -61,28 +25,28 @@ const userSchema = new Schema<TUser, UserModel>(
     password: {
       type: String,
       required: true,
-      select: 0,
-    },
-    needsPasswordChange: {
-      type: Boolean,
-      default: false, // Changed to false for better UX
-    },
-    passwordChangedAt: {
-      type: Date,
+      select: 0, // Hide password by default
     },
     role: {
       type: String,
-      enum: ['admin', 'user'], // Updated to only admin and user
-      required: true,
+      enum: ['admin', 'user'],
+      default: 'user',
     },
     status: {
       type: String,
-      enum: UserStatus,
-      default: 'active', // Changed from 'in-progress' to 'active'
+      enum: ['active', 'blocked'],
+      default: 'active',
     },
     isDeleted: {
       type: Boolean,
       default: false,
+    },
+    needsPasswordChange: {
+      type: Boolean,
+      default: false,
+    },
+    passwordChangedAt: {
+      type: Date,
     },
     passwordChangeCount: {
       type: Number,
@@ -95,72 +59,82 @@ const userSchema = new Schema<TUser, UserModel>(
     lastResetRequest: {
       type: Date,
     },
-    passwordResetHistory: [passwordResetHistorySchema],
+    passwordResetHistory: [
+      {
+        resetAt: { type: Date },
+        resetMethod: { type: String },
+        ipAddress: { type: String },
+      },
+    ],
+    phone: {
+      type: String,
+      trim: true,
+    },
+    address: {
+      type: String,
+      trim: true,
+    },
     profile: {
-      type: userProfileSchema,
-      required: function() {
-        return !this.isDeleted;
+      firstName: {
+        type: String,
+        trim: true,
+      },
+      lastName: {
+        type: String,
+        trim: true,
+      },
+      bio: {
+        type: String,
+        trim: true,
+      },
+      avatar: {
+        type: String,
+        trim: true,
+      },
+      dateOfBirth: {
+        type: String,
       },
     },
   },
   {
     timestamps: true,
+    versionKey: false,
   },
 );
 
-// Indexes for better performance
+// Index for better performance
 userSchema.index({ email: 1 });
 userSchema.index({ id: 1 });
-userSchema.index({ role: 1 });
-userSchema.index({ status: 1 });
+userSchema.index({ isDeleted: 1, status: 1 });
 
-// Auto-generate user ID
+// Pre-save middleware to hash password
 userSchema.pre('save', async function (next) {
-  const user = this;
-  
-  // Generate ID if not exists
-  if (!user.id) {
-    // Use User model instead of generic model
-    const User = this.constructor as any;
-    const count = await User.countDocuments();
-    user.id = `USER-${String(count + 1).padStart(6, '0')}`;
-  }
-  
-  // Hash password if modified
-  if (user.isModified('password')) {
-    user.password = await bcrypt.hash(
-      user.password,
-      Number(config.bcrypt_salt_rounds),
-    );
-  }
-  
+  if (!this.isModified('password')) return next();
+
+  this.password = await bcrypt.hash(
+    this.password,
+    Number(config.bcrypt_salt_rounds),
+  );
   next();
 });
 
-// Set empty password after saving (for security)
+// Post-save middleware to remove password from response
 userSchema.post('save', function (doc, next) {
   doc.password = '';
   next();
 });
 
-// Remove password from JSON output
-userSchema.methods.toJSON = function () {
-  const userObject = this.toObject();
-  delete userObject.password;
-  return userObject;
-};
-
-// Static method to find user by custom ID
+// Static method to check if user exists by custom ID
 userSchema.statics.isUserExistsByCustomId = async function (id: string) {
-  return await this.findOne({ id, isDeleted: { $ne: true } }).select('+password');
+  return await User.findOne({ id, isDeleted: { $ne: true } }).select('+password');
 };
 
-// Static method to find user by email
+// Static method to check if user exists by email
 userSchema.statics.isUserExistsByEmail = async function (email: string) {
-  return await this.findOne({ email, isDeleted: { $ne: true } }).select('+password');
+  return await User.findOne({ email, isDeleted: { $ne: true } }).select('+password');
 };
 
-// Static method to check password
+// Static method to check if password matches
 userSchema.statics.isPasswordMatched = async function (
   plainTextPassword: string,
   hashedPassword: string,
@@ -168,13 +142,12 @@ userSchema.statics.isPasswordMatched = async function (
   return await bcrypt.compare(plainTextPassword, hashedPassword);
 };
 
-// Static method to check JWT timing
+// Static method to check if JWT was issued before password change
 userSchema.statics.isJWTIssuedBeforePasswordChanged = function (
   passwordChangedTimestamp: Date,
   jwtIssuedTimestamp: number,
 ) {
-  const passwordChangedTime =
-    new Date(passwordChangedTimestamp).getTime() / 1000;
+  const passwordChangedTime = new Date(passwordChangedTimestamp).getTime() / 1000;
   return passwordChangedTime > jwtIssuedTimestamp;
 };
 

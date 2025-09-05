@@ -3,6 +3,7 @@ import { Model } from 'mongoose';
 
 export interface TUser {
   id: string;
+  name: string; // Added name field
   email: string;
   password: string;
   role: 'admin' | 'user';
@@ -18,33 +19,65 @@ export interface TUser {
     resetMethod: string;
     ipAddress: string;
   }>;
+  phone?: string; // Added optional phone field
+  address?: string; // Added optional address field
   profile?: {
-    firstName: string;
-    lastName: string;
-    phone?: string;
+    firstName?: string; // Made optional
+    lastName?: string; // Made optional
+    bio?: string; // Added bio field
     avatar?: string;
+    dateOfBirth?: string; // Added date of birth
   };
   createdAt: Date;
   updatedAt: Date;
 }
 
 export interface TCreateUser {
+  name: string; // Required name field
   email: string;
   password: string;
-  role?: 'user';
-  profile: {
-    firstName: string;
-    lastName: string;
-    phone?: string;
+  role?: 'admin' | 'user'; // Allow both admin and user roles
+  phone?: string; // Optional phone
+  address?: string; // Optional address
+  profile?: { // Made entire profile optional
+    firstName?: string;
+    lastName?: string;
+    bio?: string;
+    avatar?: string;
+    dateOfBirth?: string;
   };
 }
 
 export interface TUpdateUserProfile {
+  name?: string; // Allow updating name
+  phone?: string; // Allow updating phone
+  address?: string; // Allow updating address
   profile?: {
     firstName?: string;
     lastName?: string;
-    phone?: string;
+    bio?: string;
     avatar?: string;
+    dateOfBirth?: string;
+  };
+}
+
+// Login interface
+export interface TLoginUser {
+  email: string;
+  password: string;
+}
+
+// Auth response interface
+export interface TAuthResponse {
+  accessToken: string;
+  refreshToken: string;
+  needsPasswordChange: boolean;
+  user: {
+    id: string;
+    name: string;
+    email: string;
+    role: string;
+    accountAge?: number;
   };
 }
 

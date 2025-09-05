@@ -4,6 +4,7 @@ import AppError from '../../errors/AppError';
 import QueryBuilder from '../../builder/QueryBuilder';
 import { TCreateEvent, TUpdateEvent } from './event.interface';
 import { Event } from './event.model';
+import { User } from '../User/user.model';
 
 const createEvent = async (payload: TCreateEvent, userId: string) => {
   // Generate event ID manually
@@ -67,6 +68,7 @@ const getAllEvents = async (query: Record<string, unknown>) => {
     ...(categories && { categories }), // Only include categories if they exist
   };
 };
+// In your GET event service (likely getEventById)
 const getEventById = async (eventId: string) => {
   const event = await Event.findOne({ id: eventId, isDeleted: false });
 
@@ -74,60 +76,96 @@ const getEventById = async (eventId: string) => {
     throw new AppError(httpStatus.NOT_FOUND, 'Event not found');
   }
 
-  return event;
+  // ✅ ADD THIS: Manual population like in your RSVP service
+  const eventObj = event.toObject();
+  
+  // Get creator details
+  const creator = await User.findOne({ 
+    id: eventObj.createdBy, 
+    isDeleted: { $ne: true } 
+  }).select('id email role name');
+  
+  // Get attendee details
+  const attendeeUserIds = eventObj.attendees.map((a: any) => a.userId);
+  const attendeeUsers = await User.find({ 
+    id: { $in: attendeeUserIds }, 
+    isDeleted: { $ne: true } 
+  }).select('id email role name');
+  
+  // Map users to attendees
+  const attendeesWithUserDetails = eventObj.attendees.map((attendee: any) => ({
+    ...attendee,
+    userDetails: attendeeUsers.find((user: any) => user.id === attendee.userId)
+  }));
+  
+  return {
+    ...eventObj,
+    createdBy: creator,
+    attendees: attendeesWithUserDetails
+  };
 };
 
 const getUserEvents = async (userId: string, query: Record<string, unknown>) => {
-  const eventQuery = Event.find({ createdBy: userId, isDeleted: false });
-    const filteredQuery = { ...query };
-    if (filteredQuery.status === 'allstatus') {
+  const eventQuery = Event.find({ 
+    createdBy: userId, 
+    isDeleted: false 
+  });
+  const filteredQuery = { ...query };
+  
+  if (filteredQuery.status === 'allstatus') {
     delete filteredQuery.status;
   }
-    if (filteredQuery.category === 'AllCategory') {
+  
+  if (filteredQuery.category === 'AllCategory') {
     delete filteredQuery.category;
   }
-    const searchableFields = ['title', 'description'];
-    const eventQueryBuilder = new QueryBuilder(eventQuery, filteredQuery)
+
+  const searchableFields = ['title', 'description'];
+
+  const eventQueryBuilder = new QueryBuilder(eventQuery, filteredQuery)
     .search(searchableFields)
     .filter()
     .sort()
     .paginate()
     .fields();
-    const events = await eventQueryBuilder.modelQuery;
-    const meta = await eventQueryBuilder.countTotal();
-  
+
+  const events = await eventQueryBuilder.modelQuery;
+  const meta = await eventQueryBuilder.countTotal();
+
   return {
     events,
     meta,
   };
 };
 
+
 const updateEvent = async (eventId: string, payload: TUpdateEvent, userId: string) => {
-
   const event = await Event.findOne({ id: eventId, isDeleted: false });
-
   if (!event) {
     throw new AppError(httpStatus.NOT_FOUND, 'Event not found');
   }
-
   if (event.createdBy !== userId) {
     throw new AppError(httpStatus.FORBIDDEN, 'You can only update your own events');
   }
-
   const updateData = { ...payload };
   if (payload.date) {
     updateData.date = new Date(payload.date);
   }
-
   const updatedEvent = await Event.findOneAndUpdate(
     { id: eventId },
     updateData,
     { new: true, runValidators: true }
-  ).populate('createdBy', 'id email role');
-
-  return updatedEvent;
+  );
+  const eventObj = updatedEvent?.toObject();
+  const creator = await User.findOne({ 
+    id: eventObj?.createdBy, 
+    isDeleted: { $ne: true } 
+  }).select('id email role name');
+  return {
+    ...eventObj,
+    createdBy: creator
+  };
 };
-
 const deleteEvent = async (eventId: string, userId: string) => {
   const event = await Event.findOne({ id: eventId, isDeleted: false });
 
@@ -147,43 +185,134 @@ const deleteEvent = async (eventId: string, userId: string) => {
 
   return deletedEvent;
 };
-
+// Fixed backend service
 const rsvpEvent = async (eventId: string, userId: string, rsvpStatus: string) => {
+  console.log("=== RSVP SERVICE DEBUG ===");
+  console.log("eventId:", eventId, typeof eventId);
+  console.log("userId:", userId, typeof userId);
+  console.log("rsvpStatus:", rsvpStatus, typeof rsvpStatus);
+     
   const event = await Event.findOne({ id: eventId, isDeleted: false });
+  console.log("Found event:", !!event);
+  
+  if (event) {
+    console.log("Event details:");
+    console.log("- Event ID:", event.id);
+    console.log("- Event title:", event.title);
+    console.log("- Event createdBy:", event.createdBy, typeof event.createdBy);
+    console.log("- Event isPublic:", event.isPublic);
+    console.log("- Event isDeleted:", event.isDeleted);
+    console.log("- Current user trying to RSVP:", userId);
+    console.log("- Is user the creator?", event.createdBy === userId);
+  }
 
   if (!event) {
     throw new AppError(httpStatus.NOT_FOUND, 'Event not found');
   }
 
   if (!event.isPublic) {
+    console.log("❌ Event is not public!");
     throw new AppError(httpStatus.FORBIDDEN, 'Cannot RSVP to private event');
   }
 
   // Check if event is full
   if (event.maxAttendees && event.attendees.length >= event.maxAttendees && rsvpStatus === 'attending') {
+    console.log("❌ Event is full! Max:", event.maxAttendees, "Current:", event.attendees.length);
     throw new AppError(httpStatus.BAD_REQUEST, 'Event is full');
   }
 
+  // Debug current attendees
+  console.log("Current attendees:", event.attendees.length);
+  event.attendees.forEach((attendee, index) => {
+    console.log(`  ${index + 1}. UserId: ${attendee.userId}, Status: ${attendee.rsvpStatus}, Date: ${attendee.rsvpDate}`);
+  });
+
   // Remove existing RSVP if exists
-  const existingRsvpIndex = event.attendees.findIndex(attendee => attendee.userId === userId);
-  
+  const existingRsvpIndex = event.attendees.findIndex(attendee => {
+    console.log("Comparing attendee.userId:", attendee.userId, "with current userId:", userId);
+    return attendee.userId === userId;
+  });
+       
   if (existingRsvpIndex !== -1) {
+    console.log("✅ Found existing RSVP at index:", existingRsvpIndex);
+    console.log("Removing existing RSVP:", event.attendees[existingRsvpIndex]);
     event.attendees.splice(existingRsvpIndex, 1);
+  } else {
+    console.log("ℹ️ No existing RSVP found for this user");
   }
 
   // Add new RSVP if status is attending or maybe
   if (rsvpStatus === 'attending' || rsvpStatus === 'maybe') {
-    event.attendees.push({
-      userId,
+    const newAttendee = {
+      userId: String(userId), // Ensure it's a string
       rsvpStatus: rsvpStatus as any,
       rsvpDate: new Date(),
-    });
+    };
+    console.log("✅ Adding new attendee:", newAttendee);
+    event.attendees.push(newAttendee);
+  } else if (rsvpStatus === 'not_attending') {
+    console.log("ℹ️ User chose 'not_attending' - only removing existing RSVP if any");
   }
 
-  const updatedEvent = await event.save();
-  return updatedEvent.populate('createdBy', 'id email role');
+  console.log("Final attendees array before save:", event.attendees.length);
+  event.attendees.forEach((attendee, index) => {
+    console.log(`  ${index + 1}. UserId: ${attendee.userId}, Status: ${attendee.rsvpStatus}`);
+  });
+  
+  try {
+    const updatedEvent = await event.save();
+    console.log("✅ Event saved successfully!");
+    
+    // Manual population since populate might cause issues
+    const eventObj = updatedEvent.toObject();
+    
+    // Get creator details
+    console.log("Fetching creator details for ID:", eventObj.createdBy);
+    const creator = await User.findOne({ 
+      id: eventObj.createdBy, 
+      isDeleted: { $ne: true } 
+    }).select('id email role name');
+    console.log("Creator found:", !!creator);
+    
+    // Get attendee details
+    const attendeeUserIds = eventObj.attendees.map((a: any) => a.userId);
+    console.log("Fetching user details for attendee IDs:", attendeeUserIds);
+    
+    const attendeeUsers = await User.find({ 
+      id: { $in: attendeeUserIds }, 
+      isDeleted: { $ne: true } 
+    }).select('id email role name');
+    console.log("Attendee users found:", attendeeUsers.length);
+    
+    // Map users to attendees
+    const attendeesWithUserDetails = eventObj.attendees.map((attendee: any) => {
+      const userDetails = attendeeUsers.find((user: any) => user.id === attendee.userId);
+      console.log(`Mapping attendee ${attendee.userId} to user:`, !!userDetails);
+      return {
+        ...attendee,
+        userDetails
+      };
+    });
+    
+    const result = {
+      ...eventObj,
+      createdBy: creator,
+      attendees: attendeesWithUserDetails
+    };
+    
+    console.log("=== FINAL RESULT ===");
+    console.log("Event ID:", result.id);
+    console.log("Total attendees:", result.attendees.length);
+    console.log("Creator populated:", !!result.createdBy);
+    console.log("========================");
+    
+    return result;
+    
+  } catch (error) {
+    console.error("❌ Error during save:", error);
+    throw error;
+  }
 };
-
 const getEventAnalytics = async (userId?: string) => {
   // Build filter conditions
   const matchConditions: any = { isDeleted: false };

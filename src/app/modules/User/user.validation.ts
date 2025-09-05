@@ -1,93 +1,51 @@
 import { z } from 'zod';
 
+// Fixed registration validation - required fields marked properly
 const registerUserValidationSchema = z.object({
   body: z.object({
-    email: z
-      .string({
-        required_error: 'Email is required',
-      })
-      .email('Invalid email format'),
+    name: z.string({
+      required_error: 'Name is required',
+    }).min(1, 'Name cannot be empty'),
     
-    password: z
-      .string({
-        required_error: 'Password is required',
-      })
-      .min(6, 'Password must be at least 6 characters')
-      .regex(
-        /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/,
-        'Password must contain at least one uppercase letter, one lowercase letter, and one number'
-      ),
+    email: z.string({
+      required_error: 'Email is required',
+    }).email('Invalid email format'),
     
-    role: z.enum(['user']).optional(), // Only user can register directly
+    password: z.string({
+      required_error: 'Password is required',
+    }).min(6, 'Password must be at least 6 characters'),
     
+    phone: z.string().optional(),
+    address: z.string().optional(),
+    role: z.enum(['admin', 'user']).optional().default('user'),
+    
+    // Profile is completely optional for registration
     profile: z.object({
-      firstName: z
-        .string({
-          required_error: 'First name is required',
-        })
-        .min(2, 'First name must be at least 2 characters')
-        .max(50, 'First name cannot exceed 50 characters'),
-      
-      lastName: z
-        .string({
-          required_error: 'Last name is required',
-        })
-        .min(2, 'Last name must be at least 2 characters')
-        .max(50, 'Last name cannot exceed 50 characters'),
-      
-      phone: z
-        .string()
-        .optional(),
-    }),
-  }),
-});
-
-const updateProfileValidationSchema = z.object({
-  body: z.object({
-    profile: z.object({
-      firstName: z
-        .string()
-        .min(2, 'First name must be at least 2 characters')
-        .max(50, 'First name cannot exceed 50 characters')
-        .optional(),
-      
-      lastName: z
-        .string()
-        .min(2, 'Last name must be at least 2 characters')
-        .max(50, 'Last name cannot exceed 50 characters')
-        .optional(),
-      
-      phone: z
-        .string()
-        .optional(),
-      
+      firstName: z.string().optional(),
+      lastName: z.string().optional(),
+      bio: z.string().optional(),
       avatar: z.string().url('Invalid avatar URL').optional(),
+      dateOfBirth: z.string().optional(),
     }).optional(),
   }),
 });
 
-const updateUserStatusValidationSchema = z.object({
+// Login validation (separate from registration)
+const loginUserValidationSchema = z.object({
   body: z.object({
-    status: z.enum(['active', 'blocked'], {
-      required_error: 'Status is required',
+    email: z.string({
+      required_error: 'Email is required',
+    }).email('Invalid email format'),
+    
+    password: z.string({
+      required_error: 'Password is required',
     }),
   }),
 });
 
-const getUsersValidationSchema = z.object({
-  query: z.object({
-    search: z.string().optional(),
-    role: z.enum(['admin', 'user']).optional(),
-    status: z.enum(['active', 'blocked']).optional(),
-    page: z.string().transform((val) => parseInt(val, 10)).optional(),
-    limit: z.string().transform((val) => parseInt(val, 10)).optional(),
-    sort: z.string().optional(),
-  }),
-});
 
 export const UserValidation = {
   registerUserValidationSchema,
-  updateProfileValidationSchema,
-  updateUserStatusValidationSchema,
-  getUsersValidationSchema,
+  loginUserValidationSchema,
+
 };

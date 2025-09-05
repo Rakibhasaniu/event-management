@@ -1,14 +1,15 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 // src/app/middlewares/auth.ts
 import { NextFunction, Request, Response } from 'express';
 import httpStatus from 'http-status';
 import jwt, { JwtPayload } from 'jsonwebtoken';
 import config from '../config';
 import AppError from '../errors/AppError';
-import { TUserRole } from '../modules/User/user.interface';
+// import { TUserRole } from '../modules/User/user.interface';
 import { User } from '../modules/User/user.model';
 import catchAsync from '../utils/catchAsync';
 
-const auth = (...requiredRoles: TUserRole[]) => {
+const auth = (...requiredRoles: any) => {
   return catchAsync(async (req: Request, res: Response, next: NextFunction) => {
     const authHeader = req.headers.authorization;
 
