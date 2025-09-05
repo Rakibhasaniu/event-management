@@ -1,3 +1,5 @@
+/* eslint-disable no-unused-vars */
+/* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import mongoose from 'mongoose';
 import { User } from './modules/User/user.model';
@@ -29,6 +31,7 @@ const createDefaultAdmin = async () => {
     const adminData = {
       id: adminId, // Explicitly set the ID
       email: 'admin@example.com',
+      name:'System Administrator ',
       password: 'Admin123!',
       role: 'admin' as const,
       status: 'active' as const,
@@ -40,11 +43,7 @@ const createDefaultAdmin = async () => {
     };
 
     const admin = await User.create(adminData);
-    console.log('Default admin created successfully!');
-    console.log('Email:', admin.email);
-    console.log('ID:', admin.id);
-    console.log('Password: Admin123!');
-    console.log('Please change the password after first login.');
+  
 
   } catch (error: any) {
     console.error('Error creating admin:', error);
