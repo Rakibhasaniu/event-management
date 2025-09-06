@@ -18,8 +18,9 @@ app.use(cookieParser());
 
 app.use(cors({
   origin: [
-    'https://event-management-front-end-iota.vercel.app/', // your frontend domain
-    'http://localhost:3000' // optional, for local dev
+    'https://event-management-front-end-iota.vercel.app', // Remove trailing slash
+    'https://event-management-front-hvhzr3j5f-rakibhasanius-projects.vercel.app', // Add your actual frontend domain
+    'http://localhost:3000' // for local development
   ],
   credentials: true,
 }));
