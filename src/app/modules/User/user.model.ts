@@ -1,5 +1,5 @@
 import bcrypt from 'bcrypt';
-import { Schema, model } from 'mongoose';
+import { Model, Schema, model } from 'mongoose';
 import config from '../../config';
 import { TUser, UserModel } from './user.interface';
 
@@ -102,8 +102,6 @@ const userSchema = new Schema<TUser, UserModel>(
   },
 );
 
-// Index for better performance
-userSchema.index({ email: 1 });
 userSchema.index({ id: 1 });
 userSchema.index({ isDeleted: 1, status: 1 });
 
@@ -151,4 +149,5 @@ userSchema.statics.isJWTIssuedBeforePasswordChanged = function (
   return passwordChangedTime > jwtIssuedTimestamp;
 };
 
-export const User = model<TUser, UserModel>('User', userSchema);
+// export const User = model<TUser, UserModel>('User', userSchema);
+export const User = model<TUser>('User', userSchema) as Model<TUser> & UserModel;
