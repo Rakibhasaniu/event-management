@@ -18,7 +18,7 @@ app.use(cookieParser());
 
 app.use(cors({
   origin: [
-    'https://event-management-front-rbuxhintz-rakibhasanius-projects.vercel.app', // your frontend domain
+    'https://event-management-front-end-iota.vercel.app/', // your frontend domain
     'http://localhost:3000' // optional, for local dev
   ],
   credentials: true,
